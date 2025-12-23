@@ -45,13 +45,4 @@ The system works on POS transaction data with the following schema:
 }
 ```
 
-## 🧠 ARCHITECTURE OVERVIEW
-POS Data (SAP / JSON)
-        ↓
-Data Preparation (n8n)
-        ↓
-AI Agent (LLM-based reasoning)
-        ↓
-Business Explanation + Actions
-        ↓
-Chat UI / API / Automation
+
