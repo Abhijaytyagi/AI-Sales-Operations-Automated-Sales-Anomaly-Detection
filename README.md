@@ -43,9 +43,9 @@ The system works on POS transaction data with the following schema:
   "sales_qty": 8,
   "net_sales": 640
 }
+```
 
-
-## 🧠 **ARCHITECTURE OVERVIEW**
+## 🧠 ARCHITECTURE OVERVIEW
 POS Data (SAP / JSON)
         ↓
 Data Preparation (n8n)
