@@ -1,0 +1,1027 @@
+{
+  "name": "SAP CAR USECASE-V1.2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -528,
+        -272
+      ],
+      "id": "2ab33d8a-d5a5-4116-bf02-cc9928415559",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "062130de-ee42-4f5d-92cb-0fcc2075c4d5",
+              "name": "start_date",
+              "value": "={{ $now.minus({ days: 14 }).toISODate() }}\n",
+              "type": "string"
+            },
+            {
+              "id": "f3b67006-56ec-46ed-b496-fccd0f82c840",
+              "name": "end_date",
+              "value": "={{ $now.toISODate() }}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -304,
+        -272
+      ],
+      "id": "d3616e71-d4d9-42f2-8c28-598b4fd13cc4",
+      "name": "Prepare_Date_Range"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate mock POS sales data similar to SAP CAR output\n\nconst stores = [\"3200\", \"3300\"];\nconst skus = [\"SKU_A\", \"SKU_B\", \"SKU_C\"];\n\nconst startDate = new Date($input.first().json.start_date);\nconst endDate = new Date($input.first().json.end_date);\n\nconst output = [];\n\nfor (const store of stores) {\n  for (const sku of skus) {\n    let currentDate = new Date(startDate);\n    let baseSales = Math.floor(Math.random() * 5) + 6; // 6–10 units\n\n    while (currentDate <= endDate) {\n      let salesQty = baseSales;\n\n      // Introduce patterns\n      if (sku === \"SKU_B\" && currentDate >= new Date(endDate.getTime() - 3 * 86400000)) {\n        salesQty = Math.max(1, Math.floor(baseSales * 0.3)); // sudden drop\n      }\n\n      if (sku === \"SKU_C\" && currentDate >= new Date(endDate.getTime() - 2 * 86400000)) {\n        salesQty = 0; // zero sales\n      }\n\n      output.push({\n        json: {\n          store_id: store,\n          sku: sku,\n          date: currentDate.toISOString().split(\"T\")[0],\n          sales_qty: salesQty,\n          net_sales: salesQty * 80\n        }\n      });\n\n      currentDate.setDate(currentDate.getDate() + 1);\n    }\n  }\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -272
+      ],
+      "id": "6ce169ab-cda6-4195-b600-fe09e4cf1e37",
+      "name": "Generate_Sample_POS_Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      pos_data: $input.all().map(item => item.json)\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        -272
+      ],
+      "id": "ea42e292-21a9-4cb7-a85f-f2f7149f7bd0",
+      "name": "Prepare_AI_Input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a retail analytics engine.\n\nYou are given raw POS transaction data for a single store across multiple SKUs and dates.\n\n\nYour tasks:\n1. Group the data by SKU.\n2. For each SKU, analyze recent sales trends compared to historical behavior.\n3. Detect meaningful anomalies, including:\n   - Sudden sales drops\n   - Zero or near-zero sales\n   - Abnormal sales spikes\n4. Assign one issue type per SKU:\n   - Normal\n   - Sales Drop\n   - Zero Sales\n   - Spike\n5. Explain each detected issue in clear business terms.\n6. Suggest 1–2 practical actions for each issue.\n\nIMPORTANT:\n- Only include SKUs where the issue type is NOT \"Normal\".\n- For each SKU, output EXACTLY ONE block using the structure below.\n- Order SKUs by severity: Zero Sales → Sales Drop → Spike.\n\nPOS transaction data:\n{{ JSON.stringify($json.pos_data, null, 2) }} \n\nUse EXACTLY the following structure for each SKU:\n\nStore ID: <value>\n\nSKU: <value>\nIssue Type: <value>\n\nSummary:\n- <1–2 short bullet points explaining what happened>\n\nObserved Pattern:\n- Average sales: <number>\n- Latest sales: <number>\n- Trend: <one short line>\n\nRecommended Actions:\n- <Action 1>\n- <Action 2>\n\nSeparate each SKU with:\n---\n\nRules:\n- Use short bullet points\n- Avoid long paragraphs\n- Do NOT include JSON\n- Do NOT add introductory or closing text\n- Do NOT mention technical methods\n",
+        "options": {
+          "systemMessage": "You are a senior retail analytics assistant specializing in store-level sales performance analysis.\n\nYour role is to:\n- Analyze raw POS transaction data objectively\n- Detect and describe meaningful sales anomalies across all SKUs based on trends and context\n- Highlight issues by business impact while ensuring all relevant anomalies are reported\n- Communicate insights clearly in simple, non-technical business language\n\nGuidelines:\n- Do not hallucinate missing data or make assumptions beyond the provided input\n- Base conclusions strictly on observed sales patterns\n- Prefer conservative, explainable reasoning over speculation\n- Be concise, structured, and actionable\n- Avoid mentioning technical terms like algorithms, thresholds, or models unless explicitly asked\n\nYour output should be suitable for business users such as store managers, planners, or operations teams.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        320,
+        -272
+      ],
+      "id": "ee990cc4-326a-4e0c-91b2-c7cf2881a717",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        176,
+        -64
+      ],
+      "id": "f21b0736-fe32-4eff-9f8d-9e74203bc4dd",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "zJ1Q7a4rCbVbjMRw",
+          "name": "OpenAi account 19"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Convert escaped newlines into real newlines\nconst cleaned = $json.output.replace(/\\\\n/g, \"\\n\");\n\n// Step 2: Split by SKU divider\nconst sections = cleaned.split(\"\\n---\\n\");\n\n// Step 3: Return one item per SKU\nreturn sections.map(section => ({\n  json: {\n    report: section.trim()\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -272
+      ],
+      "id": "4f255050-27e7-40e5-b885-df05b972d5f0",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {
+    "Generate_Sample_POS_Data": [
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-04",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-05",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-06",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-07",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-08",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-09",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-10",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-11",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-12",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-13",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-14",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-15",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-16",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-17",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_A",
+          "date": "2025-12-18",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-04",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-05",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-06",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-07",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-08",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-09",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-10",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-11",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-12",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-13",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-14",
+          "sales_qty": 8,
+          "net_sales": 640
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-15",
+          "sales_qty": 2,
+          "net_sales": 160
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-16",
+          "sales_qty": 2,
+          "net_sales": 160
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-17",
+          "sales_qty": 2,
+          "net_sales": 160
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_B",
+          "date": "2025-12-18",
+          "sales_qty": 2,
+          "net_sales": 160
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-04",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-05",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-06",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-07",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-08",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-09",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-10",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-11",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-12",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-13",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-14",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-15",
+          "sales_qty": 7,
+          "net_sales": 560
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-16",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-17",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      },
+      {
+        "json": {
+          "store_id": "3200",
+          "sku": "SKU_C",
+          "date": "2025-12-18",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-04",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-05",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-06",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-07",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-08",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-09",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-10",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-11",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-12",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-13",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-14",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-15",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-16",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-17",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_A",
+          "date": "2025-12-18",
+          "sales_qty": 9,
+          "net_sales": 720
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-04",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-05",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-06",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-07",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-08",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-09",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-10",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-11",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-12",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-13",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-14",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-15",
+          "sales_qty": 1,
+          "net_sales": 80
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-16",
+          "sales_qty": 1,
+          "net_sales": 80
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-17",
+          "sales_qty": 1,
+          "net_sales": 80
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_B",
+          "date": "2025-12-18",
+          "sales_qty": 1,
+          "net_sales": 80
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-04",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-05",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-06",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-07",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-08",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-09",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-10",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-11",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-12",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-13",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-14",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-15",
+          "sales_qty": 6,
+          "net_sales": 480
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-16",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-17",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      },
+      {
+        "json": {
+          "store_id": "3300",
+          "sku": "SKU_C",
+          "date": "2025-12-18",
+          "sales_qty": 0,
+          "net_sales": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Date_Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Date_Range": {
+      "main": [
+        [
+          {
+            "node": "Generate_Sample_POS_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate_Sample_POS_Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare_AI_Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_AI_Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "13413433-eb81-4def-ba28-d710521b20a6",
+  "meta": {
+    "instanceId": "508e0ce8cc92e0c0a0ee5fc95712f772b4796511f5e6a2cedab9ba87f670c639"
+  },
+  "id": "BUpXH688RQtvodVL",
+  "tags": []
+}
